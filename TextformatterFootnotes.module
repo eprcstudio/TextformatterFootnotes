@@ -1,0 +1,139 @@
+<?php namespace ProcessWire;
+
+/**
+ * Adds footnotes using Markdown Extra’s syntax, minus Markdown
+ * 
+ * Copyright (c) 2023 EPRC
+ * Licensed under MIT License, see LICENSE
+ *
+ * https://eprc.studio
+ *
+ * For ProcessWire 3.x
+ * Copyright (c) 2021 by Ryan Cramer
+ * Licensed under GNU/GPL v2
+ *
+ * https://www.processwire.com
+ *
+ */
+
+class TextformatterFootnotes extends Textformatter implements ConfigurableModule {
+
+	/**
+	 * 
+	 * 
+	 * @var string
+	 * 
+	 */
+	protected $defaultInlineTags = "abbr|a|bdi|bdo|br|b|cite|code|data|del|dfn|em|ins|i|kbd|mark|q|small|span|strong|sub|sup|s|time|var";
+
+	public function __construct() {
+		parent::__construct();
+		$this->set("allowedTags", $this->defaultInlineTags);
+	}
+
+	public function format(&$str) {
+		$str = $this->addFootnotes($str);
+	}
+	
+	public function formatValue(Page $page, Field $field, &$value) {
+		$value = $this->addFootnotes($value);
+	}
+
+	public function ___addFootnotes($str, $options = []) {
+		if(!$str) return "";
+		$defaultOptions = [
+			"icon" => "&#8617;",
+			"wrapperClass" => "footnotes",
+			"referenceClass" => "footnote-ref",
+			"backrefClass" => "footnote-backref"
+		];
+		$options = array_merge($defaultOptions, $options);
+		$temp = $str;
+		// Clean line returns
+		$temp = str_replace(array("\r\n", "\r"), "\n", $temp);
+		$temp = preg_replace("/\n{2,}/", "\n", $temp, -1, $count);
+		$temp = trim($temp, "\n");
+		$lines = explode("\n", $temp);
+		// Get references
+		$index = 1;
+		$references = [];
+		foreach($lines as $lineIndex => $line) {
+			if(!preg_match_all("/\[\^(\d+)\](?!:)/", $line, $matches)) continue;
+			foreach($matches[0] as $key => $match) {
+				$references[$matches[1][$key]] = [
+					"index" => $index++,
+					"str" => $match,
+					"source" => $lineIndex
+				];
+			}
+		}
+		if(empty($references)) return $str;
+		// Get footnotes
+		$footnotes = [];
+		foreach($lines as $lineIndex => $line) {
+			if(!preg_match_all("/\[\^(\d+)\]\:(?:.(?!\[\^))*/", $line, $matches)) continue;
+			$unset = true;
+			foreach($matches[0] as $key => $match) {
+				if(!key_exists($matches[1][$key], $references)) {
+					$unset = false;
+					continue;
+				}
+				$index = $references[$matches[1][$key]]["index"];
+				// Remove HTML markup
+				$footnote = strip_tags($match, explode("|", $this->allowedTags));
+				$footnote = preg_replace("/\[\^(\d+)\]\: */", "", $footnote);
+				$footnotes[$index] = $footnote;
+			}
+			if($unset) unset($lines[$lineIndex]);
+		}
+		ksort($footnotes);
+		if(empty($footnotes)) return $str;
+		// Get current id
+		$footnotesId = setting("footnotesId");
+		if(!$footnotesId) $footnotesId = 1;
+		// Add references
+		foreach($references as $key => $reference) {
+			if(!key_exists($key, $footnotes)) continue;
+			$id = "$footnotesId:$reference[index]";
+			$ref =
+				"<sup id=\"fnref$id\" class=\"$options[referenceClass]\">" .
+				"<a href=\"#fn$id\" role=\"doc-noteref\">$reference[index]</a>" . 
+				"</sup>";
+			$lines[$reference["source"]] = preg_replace("/\[\^$key\](?!:)/", $ref, $lines[$reference["source"]]);
+		}
+		// Put lines back together
+		$str = implode("\n", $lines);
+		// Add footnotes
+		$str .= "<div class=\"$options[wrapperClass]\" role=\"doc-endnotes\"><ol>";
+		foreach($footnotes as $key => $footnote) {
+			$id = "$footnotesId:$key";
+			$str .=
+				"<li id=\"fn$id\" role=\"doc-endnote\">$footnote " .
+				"<a href=\"#fnref$id\" class=\"$options[backrefClass]\" role=\"doc-backlink\">$options[icon]</a>" .
+				"</li>";
+		}
+		$str .= "</ol></div>";
+		// Increment id
+		setting("footnotesId", $footnotesId + 1);
+		return $str;
+	}
+
+	public function getModuleConfigInputfields(InputfieldWrapper $inputfields) {
+		/** @var Modules $modules */
+		$modules = $this->wire()->modules;
+
+		/** @var InputfieldTextTags $f */
+		$f = $modules->get("InputfieldTextTags");
+		$f->attr("name", "allowedTags");
+		$f->label = "Allowed Inline Tags";
+		$f->description = "When parsing the footnotes, any inline tags other than these will be removed";
+		$f->allowUserTags = 1;
+		$f->delimiter = "p";
+		$f->collapsed = 1;
+		$f->attr("value", $this->allowedTags);
+		$inputfields->append($f);
+
+		return $inputfields;
+	}
+
+}
