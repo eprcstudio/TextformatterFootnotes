@@ -28,7 +28,12 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 
 	public function __construct() {
 		parent::__construct();
+		$this->set("icon", "&#8617;");
+		$this->set("wrapperClass", "footnotes");
+		$this->set("referenceClass", "footnote-ref");
+		$this->set("backrefClass", "footnote-backref");
 		$this->set("allowedTags", $this->defaultInlineTags);
+		$this->set("reset", 0);
 	}
 
 	public function format(&$str) {
@@ -42,10 +47,12 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	public function ___addFootnotes($str, $options = []) {
 		if(!$str) return "";
 		$defaultOptions = [
-			"icon" => "&#8617;",
-			"wrapperClass" => "footnotes",
-			"referenceClass" => "footnote-ref",
-			"backrefClass" => "footnote-backref"
+			"tag" => "div",
+			"icon" => $this->icon,
+			"wrapperClass" => $this->wrapperClass,
+			"referenceClass" => $this->referenceClass,
+			"backrefClass" => $this->backrefClass,
+			"pretty" => false
 		];
 		$options = array_merge($defaultOptions, $options);
 		$temp = $str;
@@ -102,17 +109,24 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 			$lines[$reference["source"]] = preg_replace("/\[\^$key\](?!:)/", $ref, $lines[$reference["source"]]);
 		}
 		// Put lines back together
-		$str = implode("\n", $lines);
+		$str = implode("\n", $lines) . "\n";
 		// Add footnotes
-		$str .= "<div class=\"$options[wrapperClass]\" role=\"doc-endnotes\"><ol>";
+		$str .= "<$options[tag] class=\"$options[wrapperClass]\" role=\"doc-endnotes\">";
+		if($options["pretty"]) $str .= "\n\t";
+		$str .= "<ol>";
 		foreach($footnotes as $key => $footnote) {
 			$id = "$footnotesId:$key";
-			$str .=
-				"<li id=\"fn$id\" role=\"doc-endnote\">$footnote " .
-				"<a href=\"#fnref$id\" class=\"$options[backrefClass]\" role=\"doc-backlink\">$options[icon]</a>" .
-				"</li>";
+			if($options["pretty"]) $str .= "\n\t\t";
+			$str .= "<li id=\"fn$id\" role=\"doc-endnote\">";
+			if($options["pretty"]) $str .= "\n\t\t\t";
+			$str .= "$footnote <a href=\"#fnref$id\" class=\"$options[backrefClass]\" role=\"doc-backlink\">$options[icon]</a>";
+			if($options["pretty"]) $str .= "\n\t\t";
+			$str .= "</li>";
 		}
-		$str .= "</ol></div>";
+		if($options["pretty"]) $str .= "\n\t";
+		$str .= "</ol>";
+		if($options["pretty"]) $str .= "\n";
+		$str .= "</$options[tag]>";
 		// Increment id
 		setting("footnotesId", $footnotesId + 1);
 		return $str;
@@ -122,6 +136,57 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		/** @var Modules $modules */
 		$modules = $this->wire()->modules;
 
+		if($this->reset) {
+			$this->allowedTags = $this->defaultInlineTags;
+		}
+
+		/** @var InputfieldText $f */
+		$f = $modules->get("InputfieldText");
+		$f->attr("name", "icon");
+		$f->label = "Backreference icon";
+		$f->description = "Default: \"&amp;#8617;\" &#8617;";
+		$f->columnWidth = 25;
+		$f->attr("value", $this->icon);
+		$inputfields->append($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get("InputfieldText");
+		$f->attr("name", "wrapperClass");
+		$f->label = "Wrapper class";
+		$f->description = "Default: \"footnotes\"";
+		$f->columnWidth = 25;
+		$f->attr("value", $this->wrapperClass);
+		$inputfields->append($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get("InputfieldText");
+		$f->attr("name", "referenceClass");
+		$f->label = "Reference class";
+		$f->description = "Default: \"footnote-ref\"";
+		$f->columnWidth = 25;
+		$f->attr("value", $this->referenceClass);
+		$inputfields->append($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get("InputfieldText");
+		$f->attr("name", "backrefClass");
+		$f->label = "Backreference class";
+		$f->description = "Default: \"footnote-backref\"";
+		$f->columnWidth = 25;
+		$f->attr("value", $this->backrefClass);
+		$inputfields->append($f);
+
+		/** @var InputfieldMarkup $f */
+		$f = $modules->get("InputfieldMarkup");
+		$f->label = "Usage";
+		$exampleInput = "This is a reference[^1] within a text\n[^1]: And this is a footnote";
+		$exampleOutput = htmlentities($this->___addFootnotes($exampleInput, ["pretty" => true]));
+		$f->markupText = 
+			"<div><p class=\"description\">Input</p><pre>$exampleInput</pre></div>"
+			. "<div><p class=\"description\">Output</p><pre style=\"margin-bottom:0;\">$exampleOutput</pre></div>";
+		$f->collapsed = 1;
+		$inputfields->append($f);
+	
 		/** @var InputfieldTextTags $f */
 		$f = $modules->get("InputfieldTextTags");
 		$f->attr("name", "allowedTags");
@@ -129,8 +194,17 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		$f->description = "When parsing the footnotes, any inline tags other than these will be removed";
 		$f->allowUserTags = 1;
 		$f->delimiter = "p";
-		$f->collapsed = 1;
 		$f->attr("value", $this->allowedTags);
+		$inputfields->append($f);
+
+		/** @var InputfieldCheckbox $f */
+		$f = $modules->get("InputfieldCheckbox");
+		$f->attr("name", "reset");
+		$f->label = "Reset Allowed Tags";
+		$f->description = "Do you want to put back the initial allowed inline tags?";
+		$f->collapsed = 1;
+		$f->label2 = "Yes";
+		$f->attr("value", 0);
 		$inputfields->append($f);
 
 		return $inputfields;
