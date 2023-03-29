@@ -17,8 +17,8 @@ This textformatter was primarly created to ease the addition of footnotes within
 To create a footnote reference, add a caret and an identifier inside brackets ([^1]). Then add the footnote in its own line using another caret and number inside brackets with a colon and text ([^1]: My footnote.). It will be put automatically inside the footnotes block at the end of the text.
 
 ### Notes 
-- the identifier has to be a number but it is permissive in that you can put in the wrong order, it will be numbered back sequentially
-- there is no support for indentation, though since `<br>` tags are supported you should be fine
+- the identifier has to be a number but it is permissive in that you can put in the wrong order and it will be numbered back sequentially
+- there is no support for indentation, though since `<br>` tags are allowed you should be fine
 - if a footnote has no corresponding reference, it will be ignored and left as is
 
 ## Options
@@ -30,7 +30,7 @@ In the module settings, you can change the icon (string) used as the backreferen
 If you want to have a more granular control over the footnotes (e.g. per field), you can use this hook:
 
 ```php
-$wire->addHookBefore("Textformatter::addFootnotes", function(HookEvent $event) {
+$wire->addHookBefore("TextformatterFootnotes::addFootnotes", function(HookEvent $event) {
 	$str = $event->arguments(0);
 	$options = $event->arguments(1);
 	$field = $event->arguments(2);
