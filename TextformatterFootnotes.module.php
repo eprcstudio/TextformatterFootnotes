@@ -19,7 +19,7 @@
 class TextformatterFootnotes extends Textformatter implements ConfigurableModule {
 
 	/**
-	 * 
+	 * List of the default whitelisted inline tags
 	 * 
 	 * @var string
 	 * 
@@ -41,10 +41,36 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	}
 	
 	public function formatValue(Page $page, Field $field, &$value) {
-		$value = $this->addFootnotes($value);
+		$value = $this->addFootnotes($value, $field);
 	}
 
-	public function ___addFootnotes($str, $options = []) {
+	/**
+	 * Extracts references and footnotes from a string, converts them into links
+	 * and put footnotes at the end of the string
+	 * 
+	 * You can specify options in an associative array:
+	 * 
+	 * - `tag` (string): Tag used for the footnotes’ wrapper
+	 * 
+	 * - `icon` (string): String (could be a `<img>` or `<svg>`) used in the
+	 * backreference link
+	 * 
+	 * - `wrapperClass` (string): Class used for the footnotes’ wrapper
+	 * 
+	 * - `referenceClass` (string): Class used for the reference link
+	 * 
+	 * - `backrefClass` (string): Class used for the backreference link
+	 * 
+	 * - `pretty` (bool): Add tabs/carriage returns to the footnotes’ output?
+	 * 
+	 * @see https://michelf.ca/projects/php-markdown/extra/#footnotes
+	 * @param string $str
+	 * @param array $options
+	 * @param Field|string $field
+	 * @return string
+	 * 
+	 */
+	public function ___addFootnotes($str, $options = [], $field = "") {
 		if(!$str) return "";
 		$defaultOptions = [
 			"tag" => "div",
