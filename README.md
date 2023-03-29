@@ -4,9 +4,9 @@ This textformatter adds footnotes using [Markdown Extra](https://michelf.ca/proj
 
 ![screenshot](https://user-images.githubusercontent.com/6616448/228490886-37eb92d4-e41b-4a56-98ad-faf87588a74c.png)
 
-Modules directory: 
+Modules directory: https://processwire.com/modules/textformatter-footnotes/
 
-Support forum: 
+Support forum: https://processwire.com/talk/topic/28344-textformatterfoonotes/
 
 ## About
 
