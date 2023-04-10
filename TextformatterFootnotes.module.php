@@ -41,7 +41,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	}
 	
 	public function formatValue(Page $page, Field $field, &$value) {
-		$value = $this->addFootnotes($value, $field);
+		$value = $this->addFootnotes($value, [], $field);
 	}
 
 	/**
@@ -72,6 +72,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	 */
 	public function ___addFootnotes($str, $options = [], $field = "") {
 		if(!$str) return "";
+		if(!is_array($options)) $options = [];
 		$defaultOptions = [
 			"tag" => "div",
 			"icon" => $this->icon,
