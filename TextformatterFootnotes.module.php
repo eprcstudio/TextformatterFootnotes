@@ -85,8 +85,6 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		$temp = $str;
 		// Clean line returns
 		$temp = str_replace(array("\r\n", "\r"), "\n", $temp);
-		$temp = preg_replace("/\n{2,}/", "\n", $temp);
-		$temp = trim($temp, "\n");
 		$lines = explode("\n", $temp);
 		// Get references
 		$index = 1;
