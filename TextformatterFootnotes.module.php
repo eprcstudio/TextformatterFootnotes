@@ -125,7 +125,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		if(!$footnotesId) $footnotesId = 1;
 		// Add references
 		foreach($references as $key => $reference) {
-			if(!key_exists($key, $footnotes)) continue;
+			if(!key_exists($reference["index"], $footnotes)) continue;
 			$id = "$footnotesId:$reference[index]";
 			$ref =
 				"<sup id=\"fnref$id\" class=\"$options[referenceClass]\">" .
