@@ -20,6 +20,7 @@ To create a footnote reference, add a caret and an identifier inside brackets ([
 - the identifier has to be a number but it is permissive in that you can put in the wrong order and it will be numbered back sequentially
 - there is no support for indentation, though since `<br>` tags are allowed you should be fine
 - if a footnote has no corresponding reference, it will be ignored and left as is
+- by default references/footnotes are sequenced per field, meaning if you are outputting several fields with this textformatter each footnotes group will start from 1. This can changed using the "Use continuous sequencing?" option
 
 ## Options
 

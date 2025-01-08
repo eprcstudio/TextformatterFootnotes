@@ -32,6 +32,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		$this->set("wrapperClass", "footnotes");
 		$this->set("referenceClass", "footnote-ref");
 		$this->set("backrefClass", "footnote-backref");
+		$this->set("continuous", 0);
 		$this->set("allowedTags", $this->defaultInlineTags);
 		$this->set("reset", 0);
 	}
@@ -49,18 +50,13 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	 * and put footnotes at the end of the string
 	 * 
 	 * You can specify options in an associative array:
-	 * 
 	 * - `tag` (string): Tag used for the footnotes’ wrapper
-	 * 
 	 * - `icon` (string): String (could be a `<img>` or `<svg>`) used in the
 	 * backreference link
-	 * 
 	 * - `wrapperClass` (string): Class used for the footnotes’ wrapper
-	 * 
 	 * - `referenceClass` (string): Class used for the reference link
-	 * 
 	 * - `backrefClass` (string): Class used for the backreference link
-	 * 
+	 * - `continuous` (bool): Use continuous sequencing throughout the page render?
 	 * - `pretty` (bool): Add tabs/carriage returns to the footnotes’ output?
 	 * 
 	 * @see https://michelf.ca/projects/php-markdown/extra/#footnotes
@@ -72,6 +68,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	 */
 	public function ___addFootnotes($str, $options = [], $field = "") {
 		if(!$str) return "";
+
 		if(!is_array($options)) $options = [];
 		$defaultOptions = [
 			"tag" => "div",
@@ -79,27 +76,36 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 			"wrapperClass" => $this->wrapperClass,
 			"referenceClass" => $this->referenceClass,
 			"backrefClass" => $this->backrefClass,
+			"continuous" => (bool) $this->continuous,
 			"pretty" => false
 		];
 		$options = array_merge($defaultOptions, $options);
+
 		$temp = $str;
+
 		// Clean line returns
 		$temp = str_replace(array("\r\n", "\r"), "\n", $temp);
 		$lines = explode("\n", $temp);
+
 		// Get references
-		$index = 1;
+		$footnoteIndex = $options["continuous"] ? setting("footnoteIndex") : 1;
+		if(!$footnoteIndex) {
+			$footnoteIndex = 1;
+			setting("footnoteIndex", $footnoteIndex);
+		}
 		$references = [];
 		foreach($lines as $lineIndex => $line) {
 			if(!preg_match_all("/\[\^(\d+)\](?!:)/", $line, $matches)) continue;
 			foreach($matches[0] as $key => $match) {
 				$references[$matches[1][$key]] = [
-					"index" => $index++,
+					"index" => $footnoteIndex++,
 					"str" => $match,
 					"source" => $lineIndex
 				];
 			}
 		}
 		if(empty($references)) return $str;
+
 		// Get footnotes
 		$footnotes = [];
 		foreach($lines as $lineIndex => $line) {
@@ -120,27 +126,35 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		}
 		ksort($footnotes);
 		if(empty($footnotes)) return $str;
-		// Get current id
-		$footnotesId = setting("footnotesId");
-		if(!$footnotesId) $footnotesId = 1;
+
+		// Get footnotes’ current id (not used with `continuous` option)
+		$footnotesId = setting("footnotesId") ?: 1;
+
 		// Add references
 		foreach($references as $key => $reference) {
 			if(!key_exists($reference["index"], $footnotes)) continue;
-			$id = "$footnotesId:$reference[index]";
+			$id = (!$options["continuous"] ? "$footnotesId:" : "") . $reference["index"];
 			$ref =
 				"<sup id=\"fnref$id\" class=\"$options[referenceClass]\">" .
 				"<a href=\"#fn$id\" role=\"doc-noteref\">$reference[index]</a>" . 
 				"</sup>";
+			// Replace reference with anchor link
 			$lines[$reference["source"]] = preg_replace("/\[\^$key\](?!:)/", $ref, $lines[$reference["source"]]);
 		}
+
 		// Put lines back together
 		$str = implode("\n", $lines) . "\n";
+
 		// Add footnotes
 		$str .= "<$options[tag] class=\"$options[wrapperClass]\" role=\"doc-endnotes\">";
 		if($options["pretty"]) $str .= "\n\t";
-		$str .= "<ol>";
+		$str .= "<ol";
+		if($options["continuous"]) {
+			$str .= " start='" . setting("footnoteIndex") . "'";
+		}
+		$str .= ">";
 		foreach($footnotes as $key => $footnote) {
-			$id = "$footnotesId:$key";
+			$id = (!$options["continuous"] ? "$footnotesId:" : "") . $key;
 			if($options["pretty"]) $str .= "\n\t\t";
 			$str .= "<li id=\"fn$id\" role=\"doc-endnote\">";
 			if($options["pretty"]) $str .= "\n\t\t\t";
@@ -152,8 +166,13 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		$str .= "</ol>";
 		if($options["pretty"]) $str .= "\n";
 		$str .= "</$options[tag]>";
-		// Increment id
+		
+		// Set current footnote’s index (used with `continuous` option)
+		setting("footnoteIndex", $footnoteIndex);
+		
+		// Increment footnotes’ id (not used with `continuous` option)
 		setting("footnotesId", $footnotesId + 1);
+		
 		return $str;
 	}
 
@@ -167,38 +186,38 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 
 		/** @var InputfieldText $f */
 		$f = $modules->get("InputfieldText");
-		$f->attr("name", "icon");
+		$f->name = "icon";
 		$f->label = "Backreference icon";
 		$f->description = "Default: \"&amp;#8617;\" &#8617;";
 		$f->columnWidth = 25;
-		$f->attr("value", $this->icon);
+		$f->value = $this->icon;
 		$inputfields->append($f);
 
 		/** @var InputfieldText $f */
 		$f = $modules->get("InputfieldText");
-		$f->attr("name", "wrapperClass");
+		$f->name = "wrapperClass";
 		$f->label = "Wrapper class";
 		$f->description = "Default: \"footnotes\"";
 		$f->columnWidth = 25;
-		$f->attr("value", $this->wrapperClass);
+		$f->value = $this->wrapperClass;
 		$inputfields->append($f);
 
 		/** @var InputfieldText $f */
 		$f = $modules->get("InputfieldText");
-		$f->attr("name", "referenceClass");
+		$f->name = "referenceClass";
 		$f->label = "Reference class";
 		$f->description = "Default: \"footnote-ref\"";
 		$f->columnWidth = 25;
-		$f->attr("value", $this->referenceClass);
+		$f->value = $this->referenceClass;
 		$inputfields->append($f);
 
 		/** @var InputfieldText $f */
 		$f = $modules->get("InputfieldText");
-		$f->attr("name", "backrefClass");
+		$f->name = "backrefClass";
 		$f->label = "Backreference class";
 		$f->description = "Default: \"footnote-backref\"";
 		$f->columnWidth = 25;
-		$f->attr("value", $this->backrefClass);
+		$f->value = $this->backrefClass;
 		$inputfields->append($f);
 
 		/** @var InputfieldMarkup $f */
@@ -211,25 +230,34 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 			. "<div><p class=\"description\">Output</p><pre style=\"margin-bottom:0;\">$exampleOutput</pre></div>";
 		$f->collapsed = 1;
 		$inputfields->append($f);
+
+		$f = $inputfields->InputfieldToggle;
+		$f->set('themeOffset', 1);
+		$f->label = $this->_("Use continuous sequencing?");
+		$f->description = $this->_("When enabled references/footnotes will be continuously sequenced throughout the page render instead of individually per field");
+		$f->name = "continuous";
+		$f->useReverse = 1;
+		$f->value = (bool) $this->continuous;
+		$inputfields->add($f);
 	
 		/** @var InputfieldTextTags $f */
 		$f = $modules->get("InputfieldTextTags");
-		$f->attr("name", "allowedTags");
+		$f->name = "allowedTags";
 		$f->label = "Allowed Inline Tags";
 		$f->description = "When parsing the footnotes, any inline tags other than these will be removed";
 		$f->allowUserTags = 1;
 		$f->delimiter = "p";
-		$f->attr("value", $this->allowedTags);
+		$f->value = $this->allowedTags;
 		$inputfields->append($f);
 
 		/** @var InputfieldCheckbox $f */
 		$f = $modules->get("InputfieldCheckbox");
-		$f->attr("name", "reset");
+		$f->name = "reset";
 		$f->label = "Reset Allowed Tags";
 		$f->description = "Do you want to put back the initial allowed inline tags?";
 		$f->collapsed = 1;
 		$f->label2 = "Yes";
-		$f->attr("value", 0);
+		$f->value = 0;
 		$inputfields->append($f);
 
 		return $inputfields;
