@@ -3,7 +3,7 @@
 /**
  * Adds footnotes using Markdown Extra’s syntax, minus Markdown
  * 
- * Copyright (c) 2023 EPRC
+ * Copyright (c) 2025 EPRC
  * Licensed under MIT License, see LICENSE
  *
  * https://eprc.studio
@@ -38,11 +38,13 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	}
 
 	public function format(&$str) {
-		$str = $this->addFootnotes($str);
+		$formatted = $this->addFootnotes($str);
+		$str = is_array($formatted) ? $formatted["str"] : $formatted;
 	}
 	
 	public function formatValue(Page $page, Field $field, &$value) {
-		$value = $this->addFootnotes($value, [], $field);
+		$formatted = $this->addFootnotes($value, [], $field);
+		$value = is_array($formatted) ? $formatted["str"] : $formatted;
 	}
 
 	/**
@@ -56,7 +58,9 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	 * - `wrapperClass` (string): Class used for the footnotes’ wrapper
 	 * - `referenceClass` (string): Class used for the reference link
 	 * - `backrefClass` (string): Class used for the backreference link
-	 * - `continuous` (bool): Use continuous sequencing throughout the page render?
+	 * - `continuous` (bool): Use continuous sequencing throughout page render?
+	 * - `outputAsArray` (bool): Have the function return an array with the
+	 * formatted string and the footnotes separated?
 	 * - `pretty` (bool): Add tabs/carriage returns to the footnotes’ output?
 	 * 
 	 * @see https://michelf.ca/projects/php-markdown/extra/#footnotes
@@ -67,113 +71,143 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	 * 
 	 */
 	public function ___addFootnotes($str, $options = [], $field = "") {
-		if(!$str) return "";
+		if(!$str || !is_string($str)) return "";
 
 		if(!is_array($options)) $options = [];
-		$defaultOptions = [
+		$options = $this->mergeDefaultOptions($options);
+
+		$footnoteIndex = $options["continuous"] ? (setting("tf_footnoteIndex") ?: 1) : 1;
+		$footnotesId = setting("tf_footnotesId") ?: 1;
+		
+		// Get references
+		if(!preg_match_all("/\[\^(\d+)\](?!:)/", $str, $matches)) return $str;
+		$references = [];
+		foreach($matches[0] as $key => $match) {
+			$identifier = $matches[1][$key];
+			if(!array_key_exists($identifier, $references)) {
+				$references[$identifier] = [
+					"id" => (!$options["continuous"] ? "$footnotesId:" : "") . $footnoteIndex,
+					"identifier" => $identifier,
+					"index" => $footnoteIndex,
+					"str" => $match
+				];
+				$footnoteIndex++;
+			}
+		}
+
+		if(empty($references)) return $str;
+
+		// Get footnotes
+		if(!preg_match_all("/\[\^(\d+)\]\:(?:.(?!\[\^))*/", $str, $matches)) return $str;
+		$footnotes = [];
+		foreach($matches[0] as $key => $match) {
+			$identifier = $matches[1][$key];
+			if(!array_key_exists($identifier, $references)) continue;
+			$ref = $references[$identifier];
+			$key = array_search($identifier, array_keys($references));
+			// We can’t have two footnotes with the same identifier
+			if(array_key_exists($key, $footnotes)) continue;
+			// Remove HTML markup
+			$footnote = strip_tags($match, explode("|", $this->allowedTags));
+			$footnote = preg_replace("/\[\^(\d+)\]\: */", "", $footnote);
+			$footnotes[$key] = [
+				"footnote" => $footnote,
+				"id" => $ref["id"],
+				"identifier" => $identifier,
+				"index" => $ref["index"],
+			];
+			// Remove footnote
+			$str = str_replace($match, "", $str);
+		}
+
+		if(empty($footnotes)) return $str;
+		
+		ksort($footnotes);
+
+		// Convert references into anchor links
+		$identifiers = array_column($footnotes, "identifier");
+		foreach($references as $reference) {
+			$identifier = $reference["identifier"];
+			// Cross-check
+			if(!in_array($identifier, $identifiers)) continue;
+			// Replace reference with anchor link
+			$ref =
+				"<sup id='fnref$reference[id]' class='$options[referenceClass]'>" .
+				"<a href='#fn$reference[id]' role='doc-noteref'>$reference[index]</a>" . 
+				"</sup>";
+			$str = preg_replace("/\[\^$identifier\](?!:)/", $ref, $str);
+		}
+
+		// Append footnotes
+		if(!$options["outputAsArray"]) {
+			$str .= "\n" . $this->generateFootnotesMarkup($footnotes, $options);
+		}
+
+		// Set runtime variable for the next textformatter call
+		setting("tf_footnoteIndex", $footnoteIndex);
+		setting("tf_footnotesId", $footnotesId + 1);
+		
+		return $options["outputAsArray"] ? [
+			"str" => $str,
+			"footnotes" => $footnotes
+		] : $str;
+	}
+
+	public function generateFootnotesMarkup($footnotes, $options = []) {
+		if(!$footnotes || !is_array($footnotes) || empty($footnotes)) return "";
+
+		if(!is_array($options)) $options = [];
+		$options = $this->mergeDefaultOptions($options);
+
+		$markup = "<$options[tag] class='$options[wrapperClass]' role='doc-endnotes'>";
+		if($options["pretty"]) $markup .= "\n\t";
+		$markup .= "<ol";
+		if($options["continuous"]) {
+			// we want the different ordered lists to start at the right number
+			$markup .= " start='" . $footnotes[0]["index"] . "'";
+		}
+		$markup .= ">";
+		foreach($footnotes as $footnote) {
+			$id = $footnote["id"];
+			if(!$options["continuous"]) {
+				$_group = explode(":", $id)[0];
+				// when the group id is different, create a new ordered list
+				if(isset($group) && $group !== $_group) {
+					if($options["pretty"]) $markup .= "\n\t";
+					$markup .= "</ol>";
+					if($options["pretty"]) $markup .= "\n\t";
+					$markup .= "<ol>";
+				}
+				$group = $_group;
+			}
+			if($options["pretty"]) $markup .= "\n\t\t";
+			$markup .= "<li id='fn$id' role='doc-endnote'>";
+			if($options["pretty"]) $markup .= "\n\t\t\t";
+			$markup .= 
+				"$footnote[footnote] " .
+				"<a href='#fnref$id' class='$options[backrefClass]' role='doc-backlink'>$options[icon]</a>";
+			if($options["pretty"]) $markup .= "\n\t\t";
+			$markup .= "</li>";
+		}
+		if($options["pretty"]) $markup .= "\n\t";
+		$markup .= "</ol>";
+		if($options["pretty"]) $markup .= "\n";
+		$markup .= "</$options[tag]>";
+
+		return $markup;
+	}
+
+	public function mergeDefaultOptions($options = []) {
+		return array_merge([
 			"tag" => "div",
 			"icon" => $this->icon,
 			"wrapperClass" => $this->wrapperClass,
 			"referenceClass" => $this->referenceClass,
 			"backrefClass" => $this->backrefClass,
 			"continuous" => (bool) $this->continuous,
-			"pretty" => false
-		];
-		$options = array_merge($defaultOptions, $options);
-
-		$temp = $str;
-
-		// Clean line returns
-		$temp = str_replace(array("\r\n", "\r"), "\n", $temp);
-		$lines = explode("\n", $temp);
-
-		// Get references
-		$footnoteIndex = $options["continuous"] ? setting("footnoteIndex") : 1;
-		if(!$footnoteIndex) {
-			$footnoteIndex = 1;
-			setting("footnoteIndex", $footnoteIndex);
-		}
-		$references = [];
-		foreach($lines as $lineIndex => $line) {
-			if(!preg_match_all("/\[\^(\d+)\](?!:)/", $line, $matches)) continue;
-			foreach($matches[0] as $key => $match) {
-				$references[$matches[1][$key]] = [
-					"index" => $footnoteIndex++,
-					"str" => $match,
-					"source" => $lineIndex
-				];
-			}
-		}
-		if(empty($references)) return $str;
-
-		// Get footnotes
-		$footnotes = [];
-		foreach($lines as $lineIndex => $line) {
-			if(!preg_match_all("/\[\^(\d+)\]\:(?:.(?!\[\^))*/", $line, $matches)) continue;
-			$unset = true;
-			foreach($matches[0] as $key => $match) {
-				if(!key_exists($matches[1][$key], $references)) {
-					$unset = false;
-					continue;
-				}
-				$index = $references[$matches[1][$key]]["index"];
-				// Remove HTML markup
-				$footnote = strip_tags($match, explode("|", $this->allowedTags));
-				$footnote = preg_replace("/\[\^(\d+)\]\: */", "", $footnote);
-				$footnotes[$index] = $footnote;
-			}
-			if($unset) unset($lines[$lineIndex]);
-		}
-		ksort($footnotes);
-		if(empty($footnotes)) return $str;
-
-		// Get footnotes’ current id (not used with `continuous` option)
-		$footnotesId = setting("footnotesId") ?: 1;
-
-		// Add references
-		foreach($references as $key => $reference) {
-			if(!key_exists($reference["index"], $footnotes)) continue;
-			$id = (!$options["continuous"] ? "$footnotesId:" : "") . $reference["index"];
-			$ref =
-				"<sup id=\"fnref$id\" class=\"$options[referenceClass]\">" .
-				"<a href=\"#fn$id\" role=\"doc-noteref\">$reference[index]</a>" . 
-				"</sup>";
-			// Replace reference with anchor link
-			$lines[$reference["source"]] = preg_replace("/\[\^$key\](?!:)/", $ref, $lines[$reference["source"]]);
-		}
-
-		// Put lines back together
-		$str = implode("\n", $lines) . "\n";
-
-		// Add footnotes
-		$str .= "<$options[tag] class=\"$options[wrapperClass]\" role=\"doc-endnotes\">";
-		if($options["pretty"]) $str .= "\n\t";
-		$str .= "<ol";
-		if($options["continuous"]) {
-			$str .= " start='" . setting("footnoteIndex") . "'";
-		}
-		$str .= ">";
-		foreach($footnotes as $key => $footnote) {
-			$id = (!$options["continuous"] ? "$footnotesId:" : "") . $key;
-			if($options["pretty"]) $str .= "\n\t\t";
-			$str .= "<li id=\"fn$id\" role=\"doc-endnote\">";
-			if($options["pretty"]) $str .= "\n\t\t\t";
-			$str .= "$footnote <a href=\"#fnref$id\" class=\"$options[backrefClass]\" role=\"doc-backlink\">$options[icon]</a>";
-			if($options["pretty"]) $str .= "\n\t\t";
-			$str .= "</li>";
-		}
-		if($options["pretty"]) $str .= "\n\t";
-		$str .= "</ol>";
-		if($options["pretty"]) $str .= "\n";
-		$str .= "</$options[tag]>";
-		
-		// Set current footnote’s index (used with `continuous` option)
-		setting("footnoteIndex", $footnoteIndex);
-		
-		// Increment footnotes’ id (not used with `continuous` option)
-		setting("footnotesId", $footnotesId + 1);
-		
-		return $str;
+			"outputAsArray" => false,
+			"pretty" => false,
+		], $options);
 	}
 
 	public function getModuleConfigInputfields(InputfieldWrapper $inputfields) {
@@ -226,8 +260,8 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		$exampleInput = "This is a reference[^1] within a text\n[^1]: And this is a footnote";
 		$exampleOutput = htmlentities($this->___addFootnotes($exampleInput, ["pretty" => true]));
 		$f->markupText = 
-			"<div><p class=\"description\">Input</p><pre>$exampleInput</pre></div>"
-			. "<div><p class=\"description\">Output</p><pre style=\"margin-bottom:0;\">$exampleOutput</pre></div>";
+			"<div><p class='description'>Input</p><pre>$exampleInput</pre></div>"
+			. "<div><p class='description'>Output</p><pre style='margin-bottom:0;'>$exampleOutput</pre></div>";
 		$f->collapsed = 1;
 		$inputfields->append($f);
 
