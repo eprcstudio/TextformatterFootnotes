@@ -84,21 +84,30 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		$references = [];
 		foreach($matches[0] as $key => $match) {
 			$identifier = $matches[1][$key];
-			if(!array_key_exists($identifier, $references)) {
-				$references[$identifier] = [
-					"id" => (!$options["continuous"] ? "$footnotesId:" : "") . $footnoteIndex,
-					"identifier" => $identifier,
-					"index" => $footnoteIndex,
-					"str" => $match
-				];
-				$footnoteIndex++;
-			}
+			// Have we already processed this identifier?
+			if(array_key_exists($identifier, $references)) continue;
+			// Are there any matching footnote?
+			if(!preg_match("/\[\^$identifier\]:/", $str)) continue;
+			$id = (!$options["continuous"] ? "$footnotesId:" : "") . $footnoteIndex;
+			$references[$identifier] = [
+				"id" => $id,
+				"identifier" => $identifier,
+				"index" => $footnoteIndex,
+				"str" => $match
+			];
+			// Convert references into anchor links
+			$ref =
+				"<sup id='fnref$id' class='$options[referenceClass]'>" .
+				"<a href='#fn$id' role='doc-noteref'>$footnoteIndex</a>" . 
+				"</sup>";
+			$str = preg_replace("/\[\^$identifier\](?!:)/", $ref, $str);
+			$footnoteIndex++;
 		}
 
 		if(empty($references)) return $str;
 
 		// Get footnotes
-		if(!preg_match_all("/\[\^(\d+)\]\:(?:.(?!\[\^))*/", $str, $matches)) return $str;
+		if(!preg_match_all("/\[\^(\d+)\]:.+?(?=\[\^\d+\]:|$)/m", $str, $matches)) return $str;
 		$footnotes = [];
 		foreach($matches[0] as $key => $match) {
 			$identifier = $matches[1][$key];
@@ -123,20 +132,6 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		if(empty($footnotes)) return $str;
 		
 		ksort($footnotes);
-
-		// Convert references into anchor links
-		$identifiers = array_column($footnotes, "identifier");
-		foreach($references as $reference) {
-			$identifier = $reference["identifier"];
-			// Cross-check
-			if(!in_array($identifier, $identifiers)) continue;
-			// Replace reference with anchor link
-			$ref =
-				"<sup id='fnref$reference[id]' class='$options[referenceClass]'>" .
-				"<a href='#fn$reference[id]' role='doc-noteref'>$reference[index]</a>" . 
-				"</sup>";
-			$str = preg_replace("/\[\^$identifier\](?!:)/", $ref, $str);
-		}
 
 		// Append footnotes
 		if(!$options["outputAsArray"]) {
