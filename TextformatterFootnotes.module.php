@@ -63,7 +63,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	 * @param string $str
 	 * @param array $options
 	 * @param Field|string $field
-	 * @return string
+	 * @return string|array
 	 * 
 	 */
 	public function ___addFootnotes($str, $options = [], $field = "") {
