@@ -70,7 +70,7 @@ $wire->addHookBefore("TextformatterFootnotes::addFootnotes", function(HookEvent 
 });
 
 $wire->addHookAfter("TextformatterFootnotes::addFootnotes", function(HookEvent $event) {
-	if(!array_key_exists("footnotes", $event->return)) return;
+	if(empty($event->return["footnotes"])) return;
 
 	$footnotes = setting("footnotes") ?: [];
 	$footnotes = [
