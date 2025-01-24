@@ -84,3 +84,5 @@ $wire->addHookAfter("TextformatterFootnotes::addFootnotes", function(HookEvent $
 
 echo $modules->get("TextformatterFootnotes")->generateFootnotesMarkup(setting("footnotes"));
 ```
+
+Note: if you are using this method to output your footnotes and want to dynamically change the markup/icon, please use the `TextformatterFootnotes::generateFootnotesMarkup` hook instead of `TextformatterFootnotes::addFootnotes`
