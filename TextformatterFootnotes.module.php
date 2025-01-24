@@ -52,16 +52,12 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 	 * and put footnotes at the end of the string
 	 * 
 	 * You can specify options in an associative array:
-	 * - `tag` (string): Tag used for the footnotes’ wrapper
-	 * - `icon` (string): String (could be a `<img>` or `<svg>`) used in the
-	 * backreference link
-	 * - `wrapperClass` (string): Class used for the footnotes’ wrapper
 	 * - `referenceClass` (string): Class used for the reference link
-	 * - `backrefClass` (string): Class used for the backreference link
 	 * - `continuous` (bool): Use continuous sequencing throughout page render?
 	 * - `outputAsArray` (bool): Have the function return an array with the
 	 * formatted string and the footnotes separated?
-	 * - `pretty` (bool): Add tabs/carriage returns to the footnotes’ output?
+	 *
+	 * See TextformatterFootnotes::generateFootnotesMarkup() for additional $options
 	 * 
 	 * @see https://michelf.ca/projects/php-markdown/extra/#footnotes
 	 * @param string $str
@@ -80,7 +76,12 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		$footnotesId = setting("tf_footnotesId") ?: 1;
 		
 		// Get references
-		if(!preg_match_all("/\[\^(\d+)\](?!:)/", $str, $matches)) return $str;
+		if(!preg_match_all("/\[\^(\d+)\](?!:)/", $str, $matches)) {
+			return $options["outputAsArray"] ? [
+				"str" => $str,
+				"footnotes" => []
+			] : $str;
+		}
 		$references = [];
 		foreach($matches[0] as $key => $match) {
 			$identifier = $matches[1][$key];
@@ -104,10 +105,20 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 			$footnoteIndex++;
 		}
 
-		if(empty($references)) return $str;
+		if(empty($references)) {
+			return $options["outputAsArray"] ? [
+				"str" => $str,
+				"footnotes" => []
+			] : $str;
+		}
 
 		// Get footnotes
-		if(!preg_match_all("/\[\^(\d+)\]:.+?(?=\[\^\d+\]:|$)/m", $str, $matches)) return $str;
+		if(!preg_match_all("/\[\^(\d+)\]:.+?(?=\[\^\d+\]:|$)/m", $str, $matches)) {
+			return $options["outputAsArray"] ? [
+				"str" => $str,
+				"footnotes" => []
+			] : $str;
+		}
 		$footnotes = [];
 		foreach($matches[0] as $key => $match) {
 			$identifier = $matches[1][$key];
@@ -129,7 +140,12 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 			$str = str_replace($match, "", $str);
 		}
 
-		if(empty($footnotes)) return $str;
+		if(empty($footnotes)) {
+			return $options["outputAsArray"] ? [
+				"str" => $str,
+				"footnotes" => []
+			] : $str;
+		}
 		
 		ksort($footnotes);
 
@@ -148,7 +164,25 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		] : $str;
 	}
 
-	public function generateFootnotesMarkup($footnotes, $options = []) {
+	/**
+	 * Generates the footnotes markup
+	 * 
+	 * You can specify options in an associative array:
+	 * - `tag` (string): Tag used for the footnotes’ wrapper
+	 * - `icon` (string): String (could be a `<img>` or `<svg>`) used in the
+	 * backreference link
+	 * - `wrapperClass` (string): Class used for the footnotes’ wrapper
+	 * - `backrefClass` (string): Class used for the backreference link
+	 * - `continuous` (bool): Use continuous sequencing throughout page render?
+	 * - `pretty` (bool): Add tabs/carriage returns to the footnotes’ output?
+	 * 
+	 * @see https://michelf.ca/projects/php-markdown/extra/#footnotes
+	 * @param array $footnotes
+	 * @param array $options
+	 * @return string
+	 * 
+	 */
+	public function ___generateFootnotesMarkup($footnotes, $options = []) {
 		if(!$footnotes || !is_array($footnotes) || empty($footnotes)) return "";
 
 		if(!is_array($options)) $options = [];
