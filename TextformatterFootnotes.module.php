@@ -113,7 +113,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		}
 
 		// Get footnotes
-		if(!preg_match_all("/\[\^(\d+)\]:.+?(?=\[\^\d+\]:|$)/m", $str, $matches)) {
+		if(!preg_match_all("/(?:\n)?(?:<p>)? *\[\^(\d+)\]:.+?(?=\[\^\d+\]:|$)(?:\n)?/m", $str, $matches)) {
 			return $options["outputAsArray"] ? [
 				"str" => $str,
 				"footnotes" => []
@@ -129,7 +129,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 			if(array_key_exists($key, $footnotes)) continue;
 			// Remove HTML markup
 			$footnote = strip_tags($match, explode("|", $this->allowedTags));
-			$footnote = preg_replace("/\[\^(\d+)\]\: */", "", $footnote);
+			$footnote = preg_replace("/ *\[\^(\d+)\]\: */", "", $footnote);
 			$footnotes[$key] = [
 				"footnote" => $footnote,
 				"id" => $ref["id"],
@@ -150,7 +150,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		ksort($footnotes);
 
 		// remove any <br> or <p> left behind by the footnotes
-		$str = preg_replace("/(?:\<(?:(?:br ?\/?)|p)\>)+$/m", "", $str);
+		$str = preg_replace("/(?:<(?:(?:br ?\/?)|p)>)+$/m", "", $str);
 		$str = trim($str);
 
 		// Append footnotes
