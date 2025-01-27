@@ -149,6 +149,10 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 		
 		ksort($footnotes);
 
+		// remove any <br> or <p> left behind by the footnotes
+		$str = preg_replace("/(?:\<(?:(?:br ?\/?)|p)\>)+$/", "", $str);
+		$str = trim($str);
+
 		// Append footnotes
 		if(!$options["outputAsArray"]) {
 			$str .= "\n" . $this->generateFootnotesMarkup($footnotes, $options);
