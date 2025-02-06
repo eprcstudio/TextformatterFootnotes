@@ -129,7 +129,7 @@ class TextformatterFootnotes extends Textformatter implements ConfigurableModule
 			if(array_key_exists($key, $footnotes)) continue;
 			// Remove HTML markup
 			$footnote = strip_tags($match, explode("|", $this->allowedTags));
-			$footnote = preg_replace("/ *\[\^(\d+)\]\: */", "", $footnote);
+			$footnote = trim(preg_replace("/\[\^(\d+)\]\:/", "", $footnote));
 			$footnotes[$key] = [
 				"footnote" => $footnote,
 				"id" => $ref["id"],
